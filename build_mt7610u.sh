@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -uo pipefail
 TC=$GITHUB_WORKSPACE/toolchain/bin
-export PATH=$TC:$PATH
 
 git clone -q --depth=1 https://github.com/ulli-kroll/mt7610u.git
 cd mt7610u
@@ -34,11 +33,11 @@ PYEOF
 
 # --- build (vendor-style driver: try known entry points) ---
 set -o pipefail
-if ( cd os/linux 2>/dev/null && make ARCH=arm64 CROSS_COMPILE=$TC/aarch64-linux-gnu- \
+if ( cd os/linux 2>/dev/null && make ARCH=arm64 CC=$TC/clang CROSS_COMPILE=$TC/aarch64-linux-gnu- \
        KSRC=$GITHUB_WORKSPACE/kernel/out -j"$(nproc)" 2>&1 | tee $GITHUB_WORKSPACE/mt7610u.log ); then
   echo "built via os/linux"
 else
-  make ARCH=arm64 CROSS_COMPILE=$TC/aarch64-linux-gnu- \
+  make ARCH=arm64 CC=$TC/clang CROSS_COMPILE=$TC/aarch64-linux-gnu- \
     KSRC=$GITHUB_WORKSPACE/kernel/out -j"$(nproc)" 2>&1 | tee $GITHUB_WORKSPACE/mt7610u.log
 fi
 find . -name '*.ko' -print

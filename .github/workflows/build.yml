@@ -46,11 +46,11 @@ jobs:
         run: |
           cd kernel
           TC=$GITHUB_WORKSPACE/toolchain/bin
-          export PATH=$TC:$PATH
           set -o pipefail
-          make O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- \
+          make O=out ARCH=arm64 CC=$TC/clang CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=$TC/aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=$TC/arm-linux-gnueabi- \
+            HOSTCC=gcc HOSTCXX=g++ HOSTAR=ar HOSTLD=ld \
             KCFLAGS="-Wno-error" \
             -j"$(nproc)" 2>&1 | tee ../build.log
 
@@ -63,7 +63,7 @@ jobs:
           git clone -q --depth=1 -b v5.13.6 https://github.com/aircrack-ng/rtl8812au.git
           set -o pipefail
           make -C rtl8812au ARCH=arm64 KSRC=$GITHUB_WORKSPACE/kernel/out \
-            CROSS_COMPILE=$TC/aarch64-linux-gnu- \
+            CC=$TC/clang CROSS_COMPILE=$TC/aarch64-linux-gnu- \
             -j"$(nproc)" 2>&1 | tee rtl8812au.log
           find rtl8812au -name '*.ko' -print
 
