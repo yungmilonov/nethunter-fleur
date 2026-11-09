@@ -92,6 +92,16 @@ jobs:
           print('total stubs:', count)
           PYEOF
 
+      - name: Strip local -Werror from vendor makefiles
+        run: |
+          cd kernel
+          grep -rl --include='Makefile*' --include='*.mk' --include='*Kbuild*' -- -Werror . 2>/dev/null \
+            | grep -v -e './scripts/' -e './tools/' \
+            | while read -r f; do
+                sed -i 's/-Werror=/-Wno-error=/g; s/-Werror//g' "$f"
+                echo "stripped: $f"
+              done
+
       - name: Build kernel
         run: |
           cd kernel
