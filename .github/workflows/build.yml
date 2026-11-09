@@ -98,7 +98,7 @@ jobs:
           grep -rl --include='Makefile*' --include='*.mk' --include='*Kbuild*' -- -Werror . 2>/dev/null \
             | grep -v -e './scripts/' -e './tools/' \
             | while read -r f; do
-                sed -i 's/-Werror=/-Wno-error=/g; s/-Werror//g' "$f"
+                sed -i 's/-Werror-/-Wno-error=/g; s/-Werror=/-Wno-error=/g; s/-Werror//g' "$f"
                 echo "stripped: $f"
               done
 
