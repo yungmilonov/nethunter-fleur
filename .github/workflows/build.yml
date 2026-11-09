@@ -1,0 +1,85 @@
+name: Build NetHunter kernel (fleur)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'README.md'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential bc bison flex libssl-dev libelf-dev cpio zip curl
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h /
+
+      - name: Clone kernel source (fleur-s-oss)
+        run: git clone --depth=1 -b fleur-s-oss https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git kernel
+
+      - name: Clone toolchain (proton-clang)
+        run: git clone --depth=1 https://github.com/kdrag0n/proton-clang.git toolchain
+
+      - name: Configure kernel
+        run: |
+          cd kernel
+          DEFCONFIG=$(ls arch/arm64/configs | grep -m1 '^fleur_defconfig$')
+          echo "Using defconfig: $DEFCONFIG"
+          make O=out ARCH=arm64 "$DEFCONFIG"
+          ./scripts/kconfig/merge_config.sh -m out/.config ../nethunter.config || true
+          make O=out ARCH=arm64 olddefconfig
+          echo '=== sanity check ==='
+          grep -E 'CONFIG_(USB_CONFIGFS_F_HID|USB_CONFIGFS_MASS_STORAGE|RTL8XXXU|MT7601U|ATH9K_HTC|RT2800USB|USB_NET_QMI_WWAN|MODULES)=' out/.config || true
+
+      - name: Build kernel
+        run: |
+          cd kernel
+          TC=$GITHUB_WORKSPACE/toolchain/bin
+          export PATH=$TC:$PATH
+          set -o pipefail
+          make O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=$TC/aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=$TC/arm-linux-gnueabi- \
+            KCFLAGS="-Wno-error" \
+            -j"$(nproc)" 2>&1 | tee ../build.log
+
+      - name: Show boot artifacts
+        run: ls -la kernel/out/arch/arm64/boot/
+
+      - name: Build rtl8812au (88XXAU.ko)
+        run: |
+          TC=$GITHUB_WORKSPACE/toolchain/bin
+          git clone -q --depth=1 -b v5.13.6 https://github.com/aircrack-ng/rtl8812au.git
+          set -o pipefail
+          make -C rtl8812au ARCH=arm64 KSRC=$GITHUB_WORKSPACE/kernel/out \
+            CROSS_COMPILE=$TC/aarch64-linux-gnu- \
+            -j"$(nproc)" 2>&1 | tee rtl8812au.log
+          find rtl8812au -name '*.ko' -print
+
+      - name: Build mt7610u (Archer T2U Plus)
+        continue-on-error: true
+        run: ./build_mt7610u.sh
+
+      - name: Package (AnyKernel3 + Magisk module)
+        run: ./package.sh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nethunter-fleur
+          path: |
+            out/*.zip
+            out/*.config
+            out/*.log
+          if-no-files-found: error
