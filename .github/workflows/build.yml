@@ -19,6 +19,13 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq build-essential bc bison flex libssl-dev libelf-dev cpio zip curl gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+          # aarch64 assembler where clang's driver looks for it (prefixed name in PATH)
+          sudo mkdir -p /opt/a64bin /opt/a64gcc/bin
+          sudo ln -sf /usr/bin/aarch64-linux-gnu-as /opt/a64bin/aarch64-linux-gnu-as
+          for t in as ld ar nm objcopy objdump readelf strip ranlib size strings; do
+            sudo ln -sf /usr/bin/aarch64-linux-gnu-$$t /opt/a64gcc/bin/aarch64-linux-gnu-$$t
+          done
+          ls -la /opt/a64bin /opt/a64gcc/bin
 
       - name: Free disk space
         run: |
@@ -54,11 +61,12 @@ jobs:
         run: |
           cd kernel
           TC=$GITHUB_WORKSPACE/toolchain/bin
+          export PATH=/opt/a64bin:$PATH
           sed -i 's/^ifdef stackp-name$/ifdef stackp-name-disabled-by-ci/' Makefile
           sed -i 's/^ifdef stackp-check$/ifdef stackp-check-disabled-by-ci/' Makefile
           set -o pipefail
           make O=out ARCH=arm64 CC=$TC/clang CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=/usr/bin/aarch64-linux-gnu- \
+            CROSS_COMPILE=/opt/a64gcc/bin/aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=/usr/bin/arm-linux-gnueabi- \
             HOSTCC=gcc HOSTCXX=g++ HOSTAR=ar HOSTLD=ld \
             KCFLAGS="-Wno-error" \
@@ -70,10 +78,11 @@ jobs:
       - name: Build rtl8812au (88XXAU.ko)
         run: |
           TC=$GITHUB_WORKSPACE/toolchain/bin
+          export PATH=/opt/a64bin:$PATH
           git clone -q --depth=1 -b v5.13.6 https://github.com/aircrack-ng/rtl8812au.git
           set -o pipefail
           make -C rtl8812au ARCH=arm64 KSRC=$GITHUB_WORKSPACE/kernel/out \
-            CC=$TC/clang CROSS_COMPILE=/usr/bin/aarch64-linux-gnu- \
+            CC=$TC/clang CROSS_COMPILE=/opt/a64gcc/bin/aarch64-linux-gnu- \
             -j"$(nproc)" 2>&1 | tee rtl8812au.log
           find rtl8812au -name '*.ko' -print
 
