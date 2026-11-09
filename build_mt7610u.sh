@@ -33,11 +33,11 @@ PYEOF
 
 # --- build (vendor-style driver: try known entry points) ---
 set -o pipefail
-if ( cd os/linux 2>/dev/null && make ARCH=arm64 CC=$TC/clang CROSS_COMPILE=$TC/aarch64-linux-gnu- \
+if ( cd os/linux 2>/dev/null && make ARCH=arm64 CC=$TC/clang CROSS_COMPILE=/usr/bin/aarch64-linux-gnu- \
        KSRC=$GITHUB_WORKSPACE/kernel/out -j"$(nproc)" 2>&1 | tee $GITHUB_WORKSPACE/mt7610u.log ); then
   echo "built via os/linux"
 else
-  make ARCH=arm64 CC=$TC/clang CROSS_COMPILE=$TC/aarch64-linux-gnu- \
+  make ARCH=arm64 CC=$TC/clang CROSS_COMPILE=/usr/bin/aarch64-linux-gnu- \
     KSRC=$GITHUB_WORKSPACE/kernel/out -j"$(nproc)" 2>&1 | tee $GITHUB_WORKSPACE/mt7610u.log
 fi
 find . -name '*.ko' -print
