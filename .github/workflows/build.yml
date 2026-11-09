@@ -57,6 +57,41 @@ jobs:
           ($TC/clang -target aarch64-linux-gnu -fstack-protector-strong -S -o /dev/null -xc /dev/null && echo probe-a64-ok) || echo probe-a64-FAIL
           ($TC/clang -Werror -target aarch64-linux-gnu -fstack-protector-strong -S -o /dev/null -xc /dev/null && echo probe-a64-werror-ok) || echo probe-a64-werror-FAIL
 
+      - name: Stub missing vendor firmware blobs
+        run: |
+          cd kernel
+          python3 - <<'PYEOF'
+          import os, re
+          count = 0
+          seen = set()
+          for root, dirs, files in os.walk('.'):
+              if '.git' in root:
+                  continue
+              for fn in files:
+                  if not fn.endswith(('.c', '.h')):
+                      continue
+                  p = os.path.join(root, fn)
+                  try:
+                      s = open(p, encoding='utf-8', errors='ignore').read()
+                  except OSError:
+                      continue
+                  if '.i"' not in s:
+                      continue
+                  for m in re.finditer(r'#define\s+(\w+)\s+"([^"]+\.i)"', s):
+                      rel = m.group(2)
+                      path = os.path.normpath(os.path.join(root, rel))
+                      if path in seen:
+                          continue
+                      seen.add(path)
+                      if not os.path.exists(path):
+                          os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+                          with open(path, 'w') as f:
+                              f.write('0,\n')
+                          count += 1
+                          print('stubbed:', path)
+          print('total stubs:', count)
+          PYEOF
+
       - name: Build kernel
         run: |
           cd kernel
