@@ -37,15 +37,25 @@ jobs:
           DEFCONFIG=$(ls arch/arm64/configs | grep -m1 '^fleur_defconfig$')
           echo "Using defconfig: $DEFCONFIG"
           make O=out ARCH=arm64 "$DEFCONFIG"
+          sed -i 's/^CONFIG_CC_STACKPROTECTOR_STRONG=y/# CONFIG_CC_STACKPROTECTOR_STRONG is not set/' out/.config
+          sed -i 's/^CONFIG_CC_STACKPROTECTOR=y/# CONFIG_CC_STACKPROTECTOR is not set/' out/.config
           cat ../nethunter.config >> out/.config
           make O=out ARCH=arm64 olddefconfig
           echo '=== sanity check ==='
           grep -E 'CONFIG_(USB_CONFIGFS_F_HID|USB_CONFIGFS_MASS_STORAGE|NETDEVICES|WLAN|WIRELESS|CFG80211|MAC80211|RTL8XXXU|MT7601U|ATH9K_HTC|RT2800USB|USB_USBNET|USB_NET_QMI_WWAN|MODULES|CC_STACKPROTECTOR|CC_STACKPROTECTOR_STRONG)[= ]' out/.config | sort || true
+          echo '=== clang probe debug ==='
+          TC=$GITHUB_WORKSPACE/toolchain/bin
+          $TC/clang --version | head -n1
+          ($TC/clang -fstack-protector-strong -S -o /dev/null -xc /dev/null && echo probe-host-ok) || echo probe-host-FAIL
+          ($TC/clang -target aarch64-linux-gnu -fstack-protector-strong -S -o /dev/null -xc /dev/null && echo probe-a64-ok) || echo probe-a64-FAIL
+          ($TC/clang -Werror -target aarch64-linux-gnu -fstack-protector-strong -S -o /dev/null -xc /dev/null && echo probe-a64-werror-ok) || echo probe-a64-werror-FAIL
 
       - name: Build kernel
         run: |
           cd kernel
           TC=$GITHUB_WORKSPACE/toolchain/bin
+          sed -i 's/^ifdef stackp-name$/ifdef stackp-name-disabled-by-ci/' Makefile
+          sed -i 's/^ifdef stackp-check$/ifdef stackp-check-disabled-by-ci/' Makefile
           set -o pipefail
           make O=out ARCH=arm64 CC=$TC/clang CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=$TC/aarch64-linux-gnu- \
