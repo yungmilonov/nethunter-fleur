@@ -23,7 +23,7 @@ jobs:
           sudo mkdir -p /opt/a64bin /opt/a64gcc/bin
           sudo ln -sf /usr/bin/aarch64-linux-gnu-as /opt/a64bin/aarch64-linux-gnu-as
           for t in as ld ar nm objcopy objdump readelf strip ranlib size strings; do
-            sudo ln -sf /usr/bin/aarch64-linux-gnu-$$t /opt/a64gcc/bin/aarch64-linux-gnu-$$t
+            sudo ln -sf /usr/bin/aarch64-linux-gnu-$t /opt/a64gcc/bin/aarch64-linux-gnu-$t
           done
           ls -la /opt/a64bin /opt/a64gcc/bin
 
