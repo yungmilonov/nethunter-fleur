@@ -37,10 +37,10 @@ jobs:
           DEFCONFIG=$(ls arch/arm64/configs | grep -m1 '^fleur_defconfig$')
           echo "Using defconfig: $DEFCONFIG"
           make O=out ARCH=arm64 "$DEFCONFIG"
-          ./scripts/kconfig/merge_config.sh -m out/.config ../nethunter.config || true
+          cat ../nethunter.config >> out/.config
           make O=out ARCH=arm64 olddefconfig
           echo '=== sanity check ==='
-          grep -E 'CONFIG_(USB_CONFIGFS_F_HID|USB_CONFIGFS_MASS_STORAGE|RTL8XXXU|MT7601U|ATH9K_HTC|RT2800USB|USB_NET_QMI_WWAN|MODULES)=' out/.config || true
+          grep -E 'CONFIG_(USB_CONFIGFS_F_HID|USB_CONFIGFS_MASS_STORAGE|NETDEVICES|WLAN|WIRELESS|CFG80211|MAC80211|RTL8XXXU|MT7601U|ATH9K_HTC|RT2800USB|USB_USBNET|USB_NET_QMI_WWAN|MODULES|CC_STACKPROTECTOR|CC_STACKPROTECTOR_STRONG)[= ]' out/.config | sort || true
 
       - name: Build kernel
         run: |
