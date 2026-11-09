@@ -105,24 +105,8 @@ jobs:
       - name: Add stpcpy (clang folds strcpy+strlen into it; missing in 4.14)
         run: |
           cd kernel
-          if ! grep -q "char \*stpcpy" lib/string.c; then
-            cat >> lib/string.c <<'EOF'
-
-#ifndef __HAVE_ARCH_STPCPY
-/**
- * stpcpy - copy a string, returning the pointer to the terminating NUL
- * @dest: destination buffer
- * @src: source string
- */
-char *stpcpy(char *dest, const char *src)
-{
-	while ((*dest++ = *src++) != '\0')
-		/* nothing */;
-	return --dest;
-}
-EXPORT_SYMBOL(stpcpy);
-#endif
-EOF
+          if ! grep -q "EXPORT_SYMBOL(stpcpy)" lib/string.c; then
+            cat ../patches/stpcpy.c.add >> lib/string.c
             echo "stpcpy: patched lib/string.c"
           else
             echo "stpcpy: already present"

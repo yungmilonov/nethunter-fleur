@@ -1,0 +1,15 @@
+
+#ifndef __HAVE_ARCH_STPCPY
+/**
+ * stpcpy - copy a string, returning the pointer to the terminating NUL
+ * @dest: destination buffer
+ * @src: source string
+ */
+char *stpcpy(char *dest, const char *src)
+{
+	while ((*dest++ = *src++) != '\0')
+		/* nothing */;
+	return --dest;
+}
+EXPORT_SYMBOL(stpcpy);
+#endif
