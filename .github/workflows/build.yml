@@ -146,6 +146,7 @@ jobs:
           find rtl8812au -name '*.ko' -print
 
       - name: Build mt7610u (Archer T2U Plus)
+        if: false
         continue-on-error: true
         run: ./build_mt7610u.sh
 
