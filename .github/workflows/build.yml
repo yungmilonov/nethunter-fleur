@@ -1,4 +1,4 @@
-name: Build NetHunter kernel (fleur)
+name: Build NetHunter modules (fleur, ROM-kernel ABI match)
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 330
+    timeout-minutes: 350
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,145 +19,73 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq build-essential bc bison flex libssl-dev libelf-dev cpio zip curl gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
-          # aarch64 assembler where clang's driver looks for it (prefixed name in PATH)
           sudo mkdir -p /opt/a64bin /opt/a64gcc/bin
           sudo ln -sf /usr/bin/aarch64-linux-gnu-as /opt/a64bin/aarch64-linux-gnu-as
           for t in as ld ar nm objcopy objdump readelf strip ranlib size strings; do
             sudo ln -sf /usr/bin/aarch64-linux-gnu-$t /opt/a64gcc/bin/aarch64-linux-gnu-$t
           done
-          ls -la /opt/a64bin /opt/a64gcc/bin
 
       - name: Free disk space
         run: |
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
           df -h /
 
-      - name: Clone kernel source (mt6781-devs @ ROM commit)
+      - name: Clone kernel source (ROM commit 5bf0cec8e008)
         run: |
           git init kernel
           cd kernel
           git remote add origin https://github.com/mt6781-devs/android_kernel_xiaomi_mt6781.git
           git fetch --depth=1 origin 5bf0cec8e008920949b01439d898441c2ec953e9
           git checkout FETCH_HEAD
-          git describe --tags 2>/dev/null || true
 
-      - name: Clone toolchain (proton-clang)
-        run: git clone --depth=1 https://github.com/kdrag0n/proton-clang.git toolchain
+      - name: Download Android clang r530567 (exact ROM build toolchain)
+        run: |
+          curl -sSL -o clang.tar.gz "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r530567.tar.gz"
+          mkdir -p "$HOME/tc"
+          tar -xzf clang.tar.gz -C "$HOME/tc"
+          "$HOME/tc/bin/clang" --version | head -2
+          "$HOME/tc/bin/ld.lld" --version | head -1
 
-      - name: Configure kernel
+      - name: Configure kernel (ROM live config + NetHunter fragment)
         run: |
           cd kernel
-          DEFCONFIG=$(ls arch/arm64/configs | grep -m1 '^fleur_defconfig$')
-          echo "Using defconfig: $DEFCONFIG"
-          make O=out ARCH=arm64 "$DEFCONFIG"
-          sed -i 's/^CONFIG_CC_STACKPROTECTOR_STRONG=y/# CONFIG_CC_STACKPROTECTOR_STRONG is not set/' out/.config
-          sed -i 's/^CONFIG_CC_STACKPROTECTOR=y/# CONFIG_CC_STACKPROTECTOR is not set/' out/.config
+          mkdir -p out
+          cp ../rom_kernel_config out/.config
+          make O=out ARCH=arm64 olddefconfig
           cat ../nethunter.config >> out/.config
           make O=out ARCH=arm64 olddefconfig
-          echo '=== sanity check ==='
-          grep -E 'CONFIG_(USB_CONFIGFS_F_HID|USB_CONFIGFS_MASS_STORAGE|NETDEVICES|WLAN|WIRELESS|CFG80211|MAC80211|RTL8XXXU|MT7601U|ATH9K_HTC|RT2800USB|USB_USBNET|USB_NET_QMI_WWAN|MODULES|CC_STACKPROTECTOR|CC_STACKPROTECTOR_STRONG)[= ]' out/.config | sort || true
-          echo '=== clang probe debug ==='
-          TC=$GITHUB_WORKSPACE/toolchain/bin
-          $TC/clang --version | head -n1
-          ($TC/clang -fstack-protector-strong -S -o /dev/null -xc /dev/null && echo probe-host-ok) || echo probe-host-FAIL
-          ($TC/clang -target aarch64-linux-gnu -fstack-protector-strong -S -o /dev/null -xc /dev/null && echo probe-a64-ok) || echo probe-a64-FAIL
-          ($TC/clang -Werror -target aarch64-linux-gnu -fstack-protector-strong -S -o /dev/null -xc /dev/null && echo probe-a64-werror-ok) || echo probe-a64-werror-FAIL
+          echo '=== sanity ==='
+          grep -E 'CONFIG_(LTO_NONE|LTO_CLANG|MODVERSIONS|MAC80211|RTL8XXXU|RT2800USB|USB_NET_QMI_WWAN|MODULES)=|CONFIG_MAC80211 ' out/.config | sort || true
 
-      - name: Stub missing vendor firmware blobs
+      - name: Build kernel + modules (clang r530567, no LTO)
         run: |
           cd kernel
-          python3 - <<'PYEOF'
-          import os, re
-          count = 0
-          seen = set()
-          for root, dirs, files in os.walk('.'):
-              if '.git' in root:
-                  continue
-              for fn in files:
-                  if not fn.endswith(('.c', '.h')):
-                      continue
-                  p = os.path.join(root, fn)
-                  try:
-                      s = open(p, encoding='utf-8', errors='ignore').read()
-                  except OSError:
-                      continue
-                  if '.i"' not in s:
-                      continue
-                  for m in re.finditer(r'#define\s+(\w+)\s+"([^"]+\.i)"', s):
-                      rel = m.group(2)
-                      path = os.path.normpath(os.path.join(root, rel))
-                      if path in seen:
-                          continue
-                      seen.add(path)
-                      if not os.path.exists(path):
-                          os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
-                          with open(path, 'w') as f:
-                              f.write('0,\n')
-                          count += 1
-                          print('stubbed:', path)
-          print('total stubs:', count)
-          PYEOF
-
-      - name: Strip local -Werror from vendor makefiles
-        run: |
-          cd kernel
-          grep -rl --include='Makefile*' --include='*.mk' --include='*Kbuild*' -- -Werror . 2>/dev/null \
-            | grep -v -e './scripts/' -e './tools/' \
-            | while read -r f; do
-                sed -i 's/-Werror-/-Wno-error=/g; s/-Werror=/-Wno-error=/g; s/-Werror//g' "$f"
-                echo "stripped: $f"
-              done
-
-      - name: Add stpcpy (clang folds strcpy+strlen into it; missing in 4.14)
-        run: |
-          cd kernel
-          if ! grep -q "EXPORT_SYMBOL(stpcpy)" lib/string.c; then
-            cat ../patches/stpcpy.c.add >> lib/string.c
-            echo "stpcpy: patched lib/string.c"
-          else
-            echo "stpcpy: already present"
-          fi
-
-      - name: Build kernel
-        run: |
-          cd kernel
-          TC=$GITHUB_WORKSPACE/toolchain/bin
-          export PATH=/opt/a64bin:$PATH
-          sed -i 's/^ifdef stackp-name$/ifdef stackp-name-disabled-by-ci/' Makefile
-          sed -i 's/^ifdef stackp-check$/ifdef stackp-check-disabled-by-ci/' Makefile
+          TC=$HOME/tc/bin
+          export PATH=$TC:/opt/a64bin:$PATH
           set -o pipefail
-          make O=out ARCH=arm64 CC=$TC/clang CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=/opt/a64gcc/bin/aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=/usr/bin/arm-linux-gnueabi- \
+          make O=out ARCH=arm64 CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm \
+            OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
             HOSTCC=gcc HOSTCXX=g++ HOSTAR=ar HOSTLD=ld \
+            CROSS_COMPILE=/opt/a64gcc/bin/aarch64-linux-gnu- \
             KCFLAGS="-Wno-error -w" \
             LOCALVERSION="-g5bf0cec8e008920949b01439d898441c2ec953e9" \
             -j"$(nproc)" 2>&1 | tee ../build.log
+          ls -la out/Module.symvers
 
-      - name: Show boot artifacts
-        run: ls -la kernel/out/arch/arm64/boot/
-
-      - name: Build rtl8812au (88XXAU.ko)
+      - name: Build rtl8812au (88XXau.ko - Archer T2U Plus RTL8811AU)
         run: |
-          TC=$GITHUB_WORKSPACE/toolchain/bin
+          TC=$HOME/tc/bin
           export PATH=/opt/a64bin:$PATH
           git clone -q --depth=1 -b v5.13.6 https://github.com/aircrack-ng/rtl8812au.git
-          # kernel 4.14 declares console_suspend_enabled as bool; align driver redeclaration
           grep -rl "extern int console_suspend_enabled" rtl8812au \
             | xargs -r sed -i 's/extern int console_suspend_enabled/extern bool console_suspend_enabled/'
           set -o pipefail
           make -C rtl8812au ARCH=arm64 KSRC=$GITHUB_WORKSPACE/kernel/out \
-            CC=$TC/clang CROSS_COMPILE=/opt/a64gcc/bin/aarch64-linux-gnu- \
-            KCFLAGS="-Wno-error -w" \
-            -j"$(nproc)" 2>&1 | tee rtl8812au.log
+            CC=$TC/clang LD=$TC/ld.lld CROSS_COMPILE=/opt/a64gcc/bin/aarch64-linux-gnu- \
+            KCFLAGS="-Wno-error -w" -j"$(nproc)" 2>&1 | tee rtl8812au.log
           find rtl8812au -name '*.ko' -print
 
-      - name: Build mt7610u (Archer T2U Plus)
-        if: false
-        continue-on-error: true
-        run: ./build_mt7610u.sh
-
-      - name: Package (AnyKernel3 + Magisk module)
+      - name: Package (Magisk module with drivers)
         run: ./package.sh
 
       - name: Upload artifacts
@@ -167,5 +95,6 @@ jobs:
           path: |
             out/*.zip
             out/*.config
+            out/Module.symvers
             out/*.log
           if-no-files-found: error
