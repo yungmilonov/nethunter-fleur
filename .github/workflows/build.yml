@@ -124,7 +124,7 @@ jobs:
             CROSS_COMPILE=/opt/a64gcc/bin/aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=/usr/bin/arm-linux-gnueabi- \
             HOSTCC=gcc HOSTCXX=g++ HOSTAR=ar HOSTLD=ld \
-            KCFLAGS="-Wno-error" \
+            KCFLAGS="-Wno-error -w" \
             -j"$(nproc)" 2>&1 | tee ../build.log
 
       - name: Show boot artifacts
@@ -135,9 +135,13 @@ jobs:
           TC=$GITHUB_WORKSPACE/toolchain/bin
           export PATH=/opt/a64bin:$PATH
           git clone -q --depth=1 -b v5.13.6 https://github.com/aircrack-ng/rtl8812au.git
+          # kernel 4.14 declares console_suspend_enabled as bool; align driver redeclaration
+          grep -rl "extern int console_suspend_enabled" rtl8812au \
+            | xargs -r sed -i 's/extern int console_suspend_enabled/extern bool console_suspend_enabled/'
           set -o pipefail
           make -C rtl8812au ARCH=arm64 KSRC=$GITHUB_WORKSPACE/kernel/out \
             CC=$TC/clang CROSS_COMPILE=/opt/a64gcc/bin/aarch64-linux-gnu- \
+            KCFLAGS="-Wno-error -w" \
             -j"$(nproc)" 2>&1 | tee rtl8812au.log
           find rtl8812au -name '*.ko' -print
 

@@ -35,10 +35,10 @@ PYEOF
 set -o pipefail
 export PATH=/opt/a64bin:$PATH
 if ( cd os/linux 2>/dev/null && make ARCH=arm64 CC=$TC/clang CROSS_COMPILE=/opt/a64gcc/bin/aarch64-linux-gnu- \
-       KSRC=$GITHUB_WORKSPACE/kernel/out -j"$(nproc)" 2>&1 | tee $GITHUB_WORKSPACE/mt7610u.log ); then
+       KCFLAGS="-Wno-error -w" KSRC=$GITHUB_WORKSPACE/kernel/out -j"$(nproc)" 2>&1 | tee $GITHUB_WORKSPACE/mt7610u.log ); then
   echo "built via os/linux"
 else
   make ARCH=arm64 CC=$TC/clang CROSS_COMPILE=/opt/a64gcc/bin/aarch64-linux-gnu- \
-    KSRC=$GITHUB_WORKSPACE/kernel/out -j"$(nproc)" 2>&1 | tee $GITHUB_WORKSPACE/mt7610u.log
+    KCFLAGS="-Wno-error -w" KSRC=$GITHUB_WORKSPACE/kernel/out -j"$(nproc)" 2>&1 | tee $GITHUB_WORKSPACE/mt7610u.log
 fi
 find . -name '*.ko' -print
