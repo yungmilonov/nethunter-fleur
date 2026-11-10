@@ -32,8 +32,14 @@ jobs:
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
           df -h /
 
-      - name: Clone kernel source (mt6781-devs 4.19)
-        run: git clone --depth=1 -b lineage-23.2 https://github.com/mt6781-devs/android_kernel_xiaomi_mt6781.git kernel
+      - name: Clone kernel source (mt6781-devs @ ROM commit)
+        run: |
+          git init kernel
+          cd kernel
+          git remote add origin https://github.com/mt6781-devs/android_kernel_xiaomi_mt6781.git
+          git fetch --depth=1 origin 5bf0cec8e008920949b01439d898441c2ec953e9
+          git checkout FETCH_HEAD
+          git describe --tags 2>/dev/null || true
 
       - name: Clone toolchain (proton-clang)
         run: git clone --depth=1 https://github.com/kdrag0n/proton-clang.git toolchain
@@ -125,6 +131,7 @@ jobs:
             CROSS_COMPILE_ARM32=/usr/bin/arm-linux-gnueabi- \
             HOSTCC=gcc HOSTCXX=g++ HOSTAR=ar HOSTLD=ld \
             KCFLAGS="-Wno-error -w" \
+            LOCALVERSION="-g5bf0cec8e008920949b01439d898441c2ec953e9" \
             -j"$(nproc)" 2>&1 | tee ../build.log
 
       - name: Show boot artifacts
