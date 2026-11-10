@@ -39,14 +39,13 @@ EOF
 cat > mm/service.sh <<'EOF'
 #!/system/bin/sh
 MODDIR=${0%/*}
+mount --bind /data/media/0 /data/local/nhsystem/kali-arm64/sdcard 2>/dev/null
 (
   sleep 30
   for pass in 1 2; do
-    for f in "$MODDIR"/system/lib/modules/*.ko; do
-      [ -e "$f" ] || continue
-      mod=$(basename "$f" .ko)
-      grep -q "^$mod " /proc/modules && continue
-      timeout 20 insmod "$f" 2>/dev/null || log -t NHMOD "insmod failed: $mod"
+    for k in 88XXau qmi_wwan btusb btintel btbcm btrtl ftdi_sio cp210x ch341 pl2303 option usb_wwan cdc_wdm cdc_ncm cdc_mbim rndis_host asix ax88179_178a smsc75xx smsc95xx snd_usb_audio snd_usbmidi_lib snd_hwdep; do
+      grep -q "^$k " /proc/modules && continue
+      timeout 20 insmod "$MODDIR/system/lib/modules/$k.ko" >/dev/null 2>&1 || log -t NHMOD "insmod failed: $k"
     done
   done
 ) &
