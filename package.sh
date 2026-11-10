@@ -57,8 +57,12 @@ curl -fsSL -o "$FW/rtl8192cufw.bin"   "$FB/rtlwifi/rtl8192cufw.bin"    || echo "
 
 # ---------- 4) Magisk module (modules + firmware) ----------
 KO=$WS/ko; mkdir -p "$KO"
+# external drivers
 find "$WS/rtl8812au" -name '*.ko' -exec cp {} "$KO/" \; 2>/dev/null || true
 find "$WS/mt7610u"   -name '*.ko' -exec cp {} "$KO/" \; 2>/dev/null || true
+# ALL in-tree modules built with the kernel (rt2800usb, mt7601u, ath9k_htc, carl9170,
+# zd1211rw, rtl8xxxu, UAS, usbnet stack, btusb, snd_usb_audio, ...)
+find "$WS/kernel/out" -name '*.ko' -exec cp {} "$KO/" \; 2>/dev/null || true
 ls -la "$KO" || true
 
 rm -rf mm
@@ -80,9 +84,14 @@ cat > mm/service.sh <<'EOF'
 MODDIR=${0%/*}
 (
   sleep 30
-  for f in "$MODDIR"/system/lib/modules/*.ko; do
-    [ -e "$f" ] || continue
-    insmod "$f" 2>/dev/null || log -t NHMOD "insmod failed: $f"
+  # two passes: second loads modules whose dependencies appeared in the first
+  for pass in 1 2; do
+    for f in "$MODDIR"/system/lib/modules/*.ko; do
+      [ -e "$f" ] || continue
+      mod=$(basename "$f" .ko)
+      grep -q "^$mod " /proc/modules && continue
+      insmod "$f" 2>/dev/null || log -t NHMOD "insmod failed: $mod"
+    done
   done
 ) &
 EOF

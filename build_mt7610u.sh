@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
+# MT7610U (TP-Link Archer T2U Plus) vendor driver build, best-effort
 set -uo pipefail
 TC=$GITHUB_WORKSPACE/toolchain/bin
 
-git clone -q --depth=1 https://github.com/ulli-kroll/mt7610u.git
+git clone -q --depth=1 https://github.com/rebrane/mt7610u.git
 cd mt7610u
 
 # --- ensure TP-Link Archer T2U Plus USB ID (2357:0120) ---
 python3 - <<'PYEOF'
-import re
+import re, glob
 p = 'common/rtusb_dev_id.c'
 try:
     s = open(p).read()
 except FileNotFoundError:
-    import glob
     cand = glob.glob('**/rtusb_dev_id.c', recursive=True)
     if not cand:
         print('WARNING: rtusb_dev_id.c not found, skipping ID patch')
@@ -31,14 +31,19 @@ else:
     print('USB ID 2357:0120 already present in', p)
 PYEOF
 
-# --- build (vendor-style driver: try known entry points) ---
+# --- build: try known vendor entry points ---
 set -o pipefail
-export PATH=/opt/a64bin:$PATH
-if ( cd os/linux 2>/dev/null && make ARCH=arm64 CC=$TC/clang CROSS_COMPILE=/opt/a64gcc/bin/aarch64-linux-gnu- \
-       KCFLAGS="-Wno-error -w" KSRC=$GITHUB_WORKSPACE/kernel/out -j"$(nproc)" 2>&1 | tee $GITHUB_WORKSPACE/mt7610u.log ); then
+KS=$GITHUB_WORKSPACE/kernel/out
+XC=/opt/a64gcc/bin/aarch64-linux-gnu-
+if make ARCH=arm64 CC=$TC/clang CROSS_COMPILE=$XC \
+     LINUX_SRC=$KS KSRC=$KS KERNEL_SRC=$KS \
+     KCFLAGS="-Wno-error -w" -j"$(nproc)" 2>&1 | tee $GITHUB_WORKSPACE/mt7610u.log; then
+  echo "built via top Makefile"
+elif ( cd os/linux 2>/dev/null && make ARCH=arm64 CC=$TC/clang CROSS_COMPILE=$XC \
+       LINUX_SRC=$KS KSRC=$KS KCFLAGS="-Wno-error -w" -j"$(nproc)" 2>&1 | tee $GITHUB_WORKSPACE/mt7610u.log ); then
   echo "built via os/linux"
 else
-  make ARCH=arm64 CC=$TC/clang CROSS_COMPILE=/opt/a64gcc/bin/aarch64-linux-gnu- \
-    KCFLAGS="-Wno-error -w" KSRC=$GITHUB_WORKSPACE/kernel/out -j"$(nproc)" 2>&1 | tee $GITHUB_WORKSPACE/mt7610u.log
+  make -C os/linux -f Makefile.6 ARCH=arm64 CC=$TC/clang CROSS_COMPILE=$XC \
+    LINUX_SRC=$KS KSRC=$KS KCFLAGS="-Wno-error -w" 2>&1 | tee $GITHUB_WORKSPACE/mt7610u.log
 fi
 find . -name '*.ko' -print
