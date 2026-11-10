@@ -6,14 +6,15 @@ OUT=$WS/out
 mkdir -p "$OUT"
 
 # ---------- 1) kernel image ----------
-KERNEL=""
+# 4.19 fleur layout (per mt6781-devs prebuilts): kernel = Image.gz, dtb separate,
+# dtbo is a separate partition (not touched). Keep stock ramdisk & dtbo.
+KERNEL="$BOOT/Image.gz"
 DTB=""
-if [ -f "$BOOT/Image.gz-dtb" ]; then
-  KERNEL="$BOOT/Image.gz-dtb"
-else
-  KERNEL="$BOOT/Image.gz"
-  DTB=$(find "$BOOT/dts" -name '*.dtb' 2>/dev/null | grep -Ei 'fleur|6781' | head -n1 || true)
+if [ ! -f "$KERNEL" ]; then
+  # legacy fallback: appended-dtb layout
+  if [ -f "$BOOT/Image.gz-dtb" ]; then KERNEL="$BOOT/Image.gz-dtb"; fi
 fi
+DTB=$(find "$BOOT/dts" -name '*.dtb' 2>/dev/null | grep -Ei 'fleur|6781' | head -n1 || true)
 echo "KERNEL=$KERNEL"
 echo "DTB=${DTB:-none}"
 
@@ -21,25 +22,25 @@ echo "DTB=${DTB:-none}"
 rm -rf ak3
 git clone -q --depth=1 https://github.com/osm0sis/AnyKernel3.git ak3
 rm -rf ak3/.git
-cp "$KERNEL" ak3/zImage
+cp "$KERNEL" ak3/Image.gz
 cat > ak3/anykernel.sh <<EOF
-# NetHunter-Max kernel for POCO M4 Pro 4G (fleur)
-kernel.string=NetHunter-Max-fleur-$(date +%Y%m%d-%H%M)
+# NetHunter-Max kernel for POCO M4 Pro 4G (fleur) - 4.19
+kernel.string=NetHunter-Max-fleur-4.19-$(date +%Y%m%d-%H%M)
 do.modules=0
 do.cleanup=0
 do.dtbo=0
 
 BLOCK=auto
-is_slot_device=0
+is_slot_device=1
 ramdisk_compression=auto
 
 files() {
-  zImage;
+  Image.gz;
 }
 EOF
 if [ -n "$DTB" ]; then
   cp "$DTB" ak3/dtb
-  awk '{ if ($0=="  zImage;") print "  zImage \\\n  dtb;"; else print }' ak3/anykernel.sh > ak3/anykernel.sh.tmp
+  awk '{ if ($0=="  Image.gz;") print "  Image.gz \\\n  dtb;"; else print }' ak3/anykernel.sh > ak3/anykernel.sh.tmp
   mv ak3/anykernel.sh.tmp ak3/anykernel.sh
 fi
 ( cd ak3 && zip -q -r9 "$OUT/AnyKernel3-nethunter-fleur.zip" . )
