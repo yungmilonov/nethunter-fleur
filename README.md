@@ -1,6 +1,6 @@
 # nethunter-fleur
 
-[![Release](https://img.shields.io/badge/release-v2.1-blue)](https://github.com/yungmilonov/nethunter-fleur/releases/tag/v2.1) — готовый зип модулей качай оттуда.
+[![Release](https://img.shields.io/badge/release-v2.1-blue)](https://github.com/yungmilonov/nethunter-fleur/releases/tag/v2.1)
 
 NetHunter driver modules for **POCO M4 Pro 4G / Redmi Note 11S 4G (fleur)** running **LineageOS 22.1** from [mt6781-devs](https://github.com/mt6781-devs/releases/tag/lineage-22).
 
