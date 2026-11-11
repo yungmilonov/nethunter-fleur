@@ -1,4 +1,4 @@
-name: Build NetHunter modules (fleur, ROM-kernel ABI match)
+name: Build NetHunter modules (fleur, ROM-kernel ABI match, LTO)
 
 on:
   workflow_dispatch:
@@ -25,9 +25,14 @@ jobs:
             sudo ln -sf /usr/bin/aarch64-linux-gnu-$t /opt/a64gcc/bin/aarch64-linux-gnu-$t
           done
 
-      - name: Free disk space
+      - name: Free disk space + add swap (LTO link needs memory)
         run: |
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          sudo fallocate -l 28G /mnt/swapfile
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile
+          sudo swapon /mnt/swapfile
+          free -h
           df -h /
 
       - name: Clone kernel source (ROM commit 5bf0cec8e008)
@@ -46,18 +51,24 @@ jobs:
           "$HOME/tc/bin/clang" --version | head -2
           "$HOME/tc/bin/ld.lld" --version | head -1
 
-      - name: Configure kernel (ROM live config + NetHunter fragment)
+      - name: Configure kernel (ROM live config, WITH clang in env, WITH LTO)
         run: |
           cd kernel
           mkdir -p out
           cp ../rom_kernel_config out/.config
-          make O=out ARCH=arm64 olddefconfig
+          export PATH=$HOME/tc/bin:/opt/a64bin:$PATH
+          make O=out ARCH=arm64 CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm \
+            OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
+            CROSS_COMPILE=/opt/a64gcc/bin/aarch64-linux-gnu- olddefconfig
           cat ../nethunter.config >> out/.config
-          make O=out ARCH=arm64 olddefconfig
+          make O=out ARCH=arm64 CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm \
+            OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
+            CROSS_COMPILE=/opt/a64gcc/bin/aarch64-linux-gnu- olddefconfig
           echo '=== sanity ==='
-          grep -E 'CONFIG_(LTO_NONE|LTO_CLANG|MODVERSIONS|MAC80211|RTL8XXXU|RT2800USB|USB_NET_QMI_WWAN|MODULES)=|CONFIG_MAC80211 ' out/.config | sort || true
+          grep -E 'CONFIG_(LTO_NONE|LTO_CLANG|MODVERSIONS|MAC80211|RTL8XXXU|RT2800USB|USB_NET_QMI_WWAN|MODULES)=' out/.config | sort || true
+          grep -q '^CONFIG_LTO_CLANG=y' out/.config || { echo '!!! LTO NOT ENABLED — ABORT'; exit 1; }
 
-      - name: Build kernel + modules (clang r530567, no LTO)
+      - name: Build kernel + modules (clang r530567, LTO)
         run: |
           cd kernel
           TC=$HOME/tc/bin
@@ -70,7 +81,7 @@ jobs:
             KCFLAGS="-Wno-error -w" \
             LOCALVERSION="-g5bf0cec8e008920949b01439d898441c2ec953e9" \
             -j"$(nproc)" 2>&1 | tee ../build.log
-          ls -la out/Module.symvers
+          ls -la out/Module.symvers out/arch/arm64/boot/
 
       - name: Build rtl8812au (88XXau.ko - Archer T2U Plus RTL8811AU)
         run: |
@@ -85,7 +96,7 @@ jobs:
             KCFLAGS="-Wno-error -w" -j"$(nproc)" 2>&1 | tee rtl8812au.log
           find rtl8812au -name '*.ko' -print
 
-      - name: Package (Magisk module with drivers)
+      - name: Package (Magisk module with drivers + kernel image)
         run: ./package.sh
 
       - name: Upload artifacts
@@ -96,5 +107,6 @@ jobs:
             out/*.zip
             out/*.config
             out/Module.symvers
+            out/Image.gz-dtb
             out/*.log
           if-no-files-found: error

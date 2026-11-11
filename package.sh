@@ -60,6 +60,8 @@ echo "#MAGISK" > mm/META-INF/com/google/android/updater-script
 ( cd mm && zip -q -r9 "$OUT/nethunter-fleur-modules-firmware.zip" . )
 
 # ---------- extras for debugging ----------
+# kernel image (for optional flash; modules are built against it)
+cp kernel/out/arch/arm64/boot/Image.gz-dtb "/" 2>/dev/null || true
 cp kernel/out/Module.symvers "$OUT/Module.symvers" 2>/dev/null || true
 cp kernel/out/.config "$OUT/fleur-nethunter.config" 2>/dev/null || true
 cp build.log "$OUT/" 2>/dev/null || true
