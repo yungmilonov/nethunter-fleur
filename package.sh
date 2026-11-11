@@ -40,6 +40,7 @@ cat > mm/service.sh <<'EOF'
 #!/system/bin/sh
 MODDIR=${0%/*}
 mount --bind /data/media/0 /data/local/nhsystem/kali-arm64/sdcard 2>/dev/null
+mount --bind /dev/bus/usb /data/local/nhsystem/kali-arm64/dev/bus/usb 2>/dev/null
 (
   sleep 30
   for pass in 1 2; do
