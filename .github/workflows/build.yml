@@ -86,7 +86,7 @@ jobs:
       - name: Build rtl8812au (88XXau.ko - Archer T2U Plus RTL8811AU)
         run: |
           TC=$HOME/tc/bin
-          export PATH=/opt/a64bin:$PATH
+          export PATH=$TC:/opt/a64bin:$PATH
           git clone -q --depth=1 -b v5.13.6 https://github.com/aircrack-ng/rtl8812au.git
           grep -rl "extern int console_suspend_enabled" rtl8812au \
             | xargs -r sed -i 's/extern int console_suspend_enabled/extern bool console_suspend_enabled/'
